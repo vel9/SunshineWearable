@@ -17,12 +17,10 @@ package com.example.android.sunshine.app;
 
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentSender;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.ActivityOptionsCompat;
@@ -36,39 +34,15 @@ import android.view.View;
 
 import com.example.android.sunshine.app.data.WeatherContract;
 import com.example.android.sunshine.app.sync.SunshineSyncAdapter;
-import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.common.api.PendingResult;
-import com.google.android.gms.wearable.DataApi;
-import com.google.android.gms.wearable.DataEventBuffer;
-import com.google.android.gms.wearable.DataMap;
-import com.google.android.gms.wearable.MessageApi;
-import com.google.android.gms.wearable.MessageEvent;
-import com.google.android.gms.wearable.Node;
-import com.google.android.gms.wearable.NodeApi;
-import com.google.android.gms.wearable.PutDataMapRequest;
-import com.google.android.gms.wearable.PutDataRequest;
-import com.google.android.gms.wearable.Wearable;
 
-import java.util.Collection;
-import java.util.HashSet;
-
-public class MainActivity extends AppCompatActivity implements ForecastFragment.Callback, DataApi.DataListener,
-        MessageApi.MessageListener, NodeApi.NodeListener, GoogleApiClient.ConnectionCallbacks,
-        GoogleApiClient.OnConnectionFailedListener {
+public class MainActivity extends AppCompatActivity implements ForecastFragment.Callback {
 
     private final String LOG_TAG = MainActivity.class.getSimpleName();
     private static final String DETAILFRAGMENT_TAG = "DFTAG";
     private final static int PLAY_SERVICES_RESOLUTION_REQUEST = 9000;
     public static final String PROPERTY_REG_ID = "registration_id";
     private static final String PROPERTY_APP_VERSION = "appVersion";
-
-    private static final int REQUEST_RESOLVE_ERROR = 1000;
-    private static final String WEARABLE_WEATHER_PATH = "/weather-update";
-    private GoogleApiClient mGoogleApiClient;
-    private boolean mResolvingError = false;
-
-    private Integer mListenerCounter = 21;
 
     /**
      * Substitute you own project number here. This project number comes
@@ -125,12 +99,6 @@ public class MainActivity extends AppCompatActivity implements ForecastFragment.
 
         SunshineSyncAdapter.initializeSyncAdapter(this);
 
-        mGoogleApiClient = new GoogleApiClient.Builder(this)
-                .addApi(Wearable.API)
-                .addConnectionCallbacks(this)
-                .addOnConnectionFailedListener(this)
-                .build();
-
         // If Google Play Services is not available, some features, such as GCM-powered weather
         // alerts, will not be available.
 //        if (checkPlayServices()) {
@@ -153,13 +121,6 @@ public class MainActivity extends AppCompatActivity implements ForecastFragment.
 //        }
     }
 
-    @Override
-    protected void onStart() {
-        super.onStart();
-        if (!mResolvingError) {
-            mGoogleApiClient.connect();
-        }
-    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -227,13 +188,6 @@ public class MainActivity extends AppCompatActivity implements ForecastFragment.
             ActivityCompat.startActivity(this, intent, activityOptions.toBundle());
         }
 
-        mListenerCounter++;
-        onSendWeatherData();
-
-        PutDataMapRequest putDataMapReq = PutDataMapRequest.create("/weather-update");
-        putDataMapReq.getDataMap().putString("highTemperature", "0");
-        putDataMapReq.getDataMap().putString("lowTemperature", "1");
-        onWearableWeatherDataUpdated(putDataMapReq);
     }
 
     /**
@@ -365,133 +319,4 @@ public class MainActivity extends AppCompatActivity implements ForecastFragment.
         editor.commit();
     }
 
-    private Collection<String> getNodes() {
-        HashSet<String> results = new HashSet<>();
-        NodeApi.GetConnectedNodesResult nodes =
-                Wearable.NodeApi.getConnectedNodes(mGoogleApiClient).await();
-
-        for (Node node : nodes.getNodes()) {
-            results.add(node.getId());
-        }
-
-        return results;
-    }
-
-    public void onWearableWeatherDataUpdated(PutDataMapRequest putDataMapReq){
-
-        Log.d(LOG_TAG, "SENDING WEATHER DATA");
-        new StartWearableWeatherDataItemSync().execute(putDataMapReq);
-    }
-
-    private class StartWearableWeatherDataItemSync extends AsyncTask<PutDataMapRequest, Void, Void> {
-
-        @Override
-        protected Void doInBackground(PutDataMapRequest... args) {
-
-            PutDataMapRequest putDataMapReq = args[0];
-            putDataMapReq.getDataMap().putInt("layer", mListenerCounter);
-            PutDataRequest putDataReq = putDataMapReq.asPutDataRequest();
-            PendingResult<DataApi.DataItemResult> pendingResult =
-                    Wearable.DataApi.putDataItem(mGoogleApiClient, putDataReq);
-
-            return null;
-        }
-    }
-
-    private void sendWeatherUpdateMessage(String nodeId) {
-
-        //http://stackoverflow.com/a/18571348
-        DataMap currentWeatherData = new DataMap();
-        currentWeatherData.putInt("weatherCode", 251);
-        currentWeatherData.putInt("high", mListenerCounter);
-        currentWeatherData.putInt("low", 32);
-        byte[] rawData = currentWeatherData.toByteArray();
-
-        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, WEARABLE_WEATHER_PATH, rawData);
-    }
-
-    private class StartWearableWeatherSync extends AsyncTask<Void, Void, Void> {
-
-        @Override
-        protected Void doInBackground(Void... args) {
-            Collection<String> nodes = getNodes();
-            for (String node : nodes) {
-                sendWeatherUpdateMessage(node);
-            }
-            return null;
-        }
-    }
-
-    public void onSendWeatherData() {
-        Log.d(LOG_TAG, "Sending weather update");
-        new StartWearableWeatherSync().execute();
-    }
-
-    @Override
-    protected void onStop() {
-        if (!mResolvingError) {
-            Wearable.DataApi.removeListener(mGoogleApiClient, this);
-            Wearable.MessageApi.removeListener(mGoogleApiClient, this);
-            Wearable.NodeApi.removeListener(mGoogleApiClient, this);
-            mGoogleApiClient.disconnect();
-        }
-        super.onStop();
-    }
-
-    @Override //ConnectionCallbacks
-    public void onConnected(Bundle connectionHint) {
-        Log.d(LOG_TAG, "Google API Client was connected");
-        mResolvingError = false;
-        Wearable.DataApi.addListener(mGoogleApiClient, this);
-        Wearable.MessageApi.addListener(mGoogleApiClient, this);
-        Wearable.NodeApi.addListener(mGoogleApiClient, this);
-    }
-
-    @Override
-    public void onConnectionSuspended(int i) {
-
-    }
-
-    @Override //OnConnectionFailedListener
-    public void onConnectionFailed(ConnectionResult result) {
-        if (mResolvingError) {
-            // Already attempting to resolve an error.
-            return;
-        } else if (result.hasResolution()) {
-            try {
-                mResolvingError = true;
-                result.startResolutionForResult(this, REQUEST_RESOLVE_ERROR);
-            } catch (IntentSender.SendIntentException e) {
-                // There was an error with the resolution intent. Try again.
-                mGoogleApiClient.connect();
-            }
-        } else {
-            Log.e(LOG_TAG, "Connection to Google API client has failed");
-            mResolvingError = false;
-            Wearable.DataApi.removeListener(mGoogleApiClient, this);
-            Wearable.MessageApi.removeListener(mGoogleApiClient, this);
-            Wearable.NodeApi.removeListener(mGoogleApiClient, this);
-        }
-    }
-
-
-    @Override
-    public void onDataChanged(DataEventBuffer dataEvents) {
-
-    }
-
-    @Override
-    public void onMessageReceived(MessageEvent messageEvent) {
-
-    }
-
-    @Override
-    public void onPeerConnected(Node node) {
-
-    }
-
-    @Override
-    public void onPeerDisconnected(Node node) {
-
-    }
 }

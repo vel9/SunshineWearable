@@ -32,10 +32,10 @@ import android.support.v4.content.LocalBroadcastManager;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
 import android.text.format.Time;
-import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 
+import com.example.android.sunshine.app.constants.AppConstants;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.NodeApi;
@@ -53,7 +53,6 @@ import java.util.concurrent.TimeUnit;
 public class SunshineWatchFaceService extends CanvasWatchFaceService {
 
     private static final String LOG_TAG = SunshineWatchFaceService.class.getSimpleName();
-    private static final int MSG_UPDATE_WEATHER = 1;
     private static final Typeface NORMAL_TYPEFACE =
             Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL);
 
@@ -77,8 +76,8 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
     private class Engine extends CanvasWatchFaceService.Engine {
         final Handler mUpdateTimeHandler = new EngineHandler(this);
 
-        private String mHighTemperature = "nada";
-        private String mLowTemperature = "nada";
+        private String mHighTemperature;
+        private String mLowTemperature;
 
         final BroadcastReceiver mTimeZoneReceiver = new BroadcastReceiver() {
             @Override
@@ -93,8 +92,8 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
         final BroadcastReceiver mWeatherReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                mHighTemperature = intent.getStringExtra("highTemperature");
-                mLowTemperature = intent.getStringExtra("lowTemperature");
+                mHighTemperature = intent.getStringExtra(AppConstants.KEY_HIGH_TEMPERATURE);
+                mLowTemperature = intent.getStringExtra(AppConstants.KEY_LOW_TEMPERATURE);
             }
         };
 
@@ -109,7 +108,8 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
         Time mTime;
 
         float mXOffset;
-        float mYOffset;
+        float mDigitalTimeDisplayYOffset;
+        float mWeatherDisplayYOffset;
 
         /**
          * Whether the display supports fewer bits for each color in ambient mode. When true, we
@@ -117,10 +117,9 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
          */
         boolean mLowBitAmbient;
 
-        private GoogleApiClient client;
+        private GoogleApiClient mGoogleApiClient;
         private String nodeId;
         private static final long CONNECTION_TIME_OUT_MS = 500;
-        private static final String WEARABLE_WEATHER_REQUEST = "/request-weather";
 
         private GoogleApiClient getGoogleApiClient(Context context) {
             return new GoogleApiClient.Builder(context)
@@ -132,7 +131,7 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
          * Initializes the GoogleApiClient and gets the Node ID of the connected device.
          */
         private void initApi() {
-            client = getGoogleApiClient(SunshineWatchFaceService.this);
+            mGoogleApiClient = getGoogleApiClient(SunshineWatchFaceService.this);
             retrieveDeviceNode();
         }
 
@@ -140,14 +139,14 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    client.blockingConnect(CONNECTION_TIME_OUT_MS, TimeUnit.MILLISECONDS);
+                    mGoogleApiClient.blockingConnect(CONNECTION_TIME_OUT_MS, TimeUnit.MILLISECONDS);
                     NodeApi.GetConnectedNodesResult result =
-                            Wearable.NodeApi.getConnectedNodes(client).await();
+                            Wearable.NodeApi.getConnectedNodes(mGoogleApiClient).await();
                     List<Node> nodes = result.getNodes();
                     if (nodes.size() > 0) {
                         nodeId = nodes.get(0).getId();
                     }
-                    client.disconnect();
+                    mGoogleApiClient.disconnect();
                 }
             }).start();
         }
@@ -160,9 +159,9 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
-                        client.blockingConnect(CONNECTION_TIME_OUT_MS, TimeUnit.MILLISECONDS);
-                        Wearable.MessageApi.sendMessage(client, nodeId, WEARABLE_WEATHER_REQUEST, null);
-                        client.disconnect();
+                        mGoogleApiClient.blockingConnect(CONNECTION_TIME_OUT_MS, TimeUnit.MILLISECONDS);
+                        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, AppConstants.PATH_REQUEST_WEATHER, null);
+                        mGoogleApiClient.disconnect();
                     }
                 }).start();
             }
@@ -178,7 +177,8 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
                     .setShowSystemUiTime(false)
                     .build());
             Resources resources = SunshineWatchFaceService.this.getResources();
-            mYOffset = resources.getDimension(R.dimen.digital_y_offset);
+            mDigitalTimeDisplayYOffset = resources.getDimension(R.dimen.time_display_digital_y_offset);
+            mWeatherDisplayYOffset = resources.getDimension(R.dimen.weather_display_digital_y_offset);
 
             mBackgroundPaint = new Paint();
             mBackgroundPaint.setColor(resources.getColor(R.color.digital_background));
@@ -211,7 +211,6 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             if (visible) {
                 registerReceiver();
 
-                //Test
                 initApi();
                 sendWeatherRequest();
 
@@ -240,7 +239,7 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
                 // We are registering an observer (mMessageReceiver) to receive Intents
                 // with actions named "custom-event-name".
                 LocalBroadcastManager.getInstance(SunshineWatchFaceService.this).registerReceiver(mWeatherReceiver,
-                        new IntentFilter("weather-update"));
+                        new IntentFilter(AppConstants.WEATHER_UPDATE_BROADCAST));
             }
         }
 
@@ -311,10 +310,10 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             String text = mAmbient
                     ? String.format("%d:%02d", mTime.hour, mTime.minute)
                     : String.format("%d:%02d:%02d", mTime.hour, mTime.minute, mTime.second);
-           // canvas.drawText(text, mXOffset, mYOffset, mTextPaint);
+            canvas.drawText(text, mXOffset, mDigitalTimeDisplayYOffset, mTextPaint);
 
-            Log.d(LOG_TAG, "re-drawing");
-            canvas.drawText(mHighTemperature + " - " + mLowTemperature, mXOffset, mYOffset, mTextPaint);
+            if (mHighTemperature != null && mLowTemperature != null)
+                canvas.drawText(mHighTemperature + " - " + mLowTemperature, mXOffset, mWeatherDisplayYOffset, mTextPaint);
         }
 
         /**

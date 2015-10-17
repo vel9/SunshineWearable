@@ -77,8 +77,6 @@ public class WeatherProvider extends ContentProvider {
         String locationSetting = WeatherContract.WeatherEntry.getLocationSettingFromWearableUri(uri);
         long startDate = WeatherContract.WeatherEntry.getStartDateFromUri(uri);
 
-        Log.d("WeatherProvider", "building wearable query" + locationSetting + startDate);
-
         String[] selectionArgs = new String[]{locationSetting, Long.toString(startDate)};
         String selection = sLocationSettingWithStartDateSelection;
 
@@ -88,7 +86,8 @@ public class WeatherProvider extends ContentProvider {
                 selectionArgs,
                 null,
                 null,
-                sortOrder
+                sortOrder,
+                "1"
         );
     }
     private Cursor getWeatherByLocationSetting(Uri uri, String[] projection, String sortOrder) {
@@ -201,9 +200,6 @@ public class WeatherProvider extends ContentProvider {
 
         // Here's the switch statement that, given a URI, will determine what kind of request it is,
         // and query the database accordingly.
-        final int match = sUriMatcher.match(uri);
-        Log.d(LOG_TAG, "URI MATCH " + match + ", " + uri.toString());
-
         Cursor retCursor;
         switch (sUriMatcher.match(uri)) {
             // "weather/*/*"
@@ -246,7 +242,6 @@ public class WeatherProvider extends ContentProvider {
             case WEATHER_WITH_LOCATION_WEARABLE:{
 
                 retCursor = getWearableWeatherByLocationSetting(uri, projection, sortOrder);
-                Log.d(LOG_TAG, "COUNT " + retCursor.getCount());
                 break;
             }
 

@@ -7,6 +7,7 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 
+import com.example.android.sunshine.app.constants.AppConstants;
 import com.example.android.sunshine.app.data.WeatherContract;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -25,17 +26,10 @@ public class SunshineListenerService extends WearableListenerService
         implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener{
 
     //https://www.binpress.com/tutorial/a-guide-to-the-android-wear-message-api/152
-    private static final String WEARABLE_WEATHER_REQUEST = "/request-weather";
-    private static final String LOG_TAG = "/request-weather-update";
+    private static final String LOG_TAG = SunshineListenerService.class.getSimpleName();
     private GoogleApiClient mGoogleApiClient;
 
     private static final String[] FORECAST_COLUMNS = {
-            // In this case the id needs to be fully qualified with a table name, since
-            // the content provider joins the location & weather tables in the background
-            // (both have an _id column)
-            // On the one hand, that's annoying.  On the other, you can search the weather table
-            // using the location set by the user, which is only in the Location table.
-            // So the convenience is worth it.
             WeatherContract.WeatherEntry.TABLE_NAME + "." + WeatherContract.WeatherEntry._ID,
             WeatherContract.WeatherEntry.COLUMN_DATE,
             WeatherContract.WeatherEntry.COLUMN_SHORT_DESC,
@@ -43,8 +37,6 @@ public class SunshineListenerService extends WearableListenerService
             WeatherContract.WeatherEntry.COLUMN_MIN_TEMP,
             WeatherContract.LocationEntry.COLUMN_LOCATION_SETTING,
             WeatherContract.WeatherEntry.COLUMN_WEATHER_ID,
-            WeatherContract.LocationEntry.COLUMN_COORD_LAT,
-            WeatherContract.LocationEntry.COLUMN_COORD_LONG
     };
 
     static final int COL_WEATHER_ID = 0;
@@ -54,16 +46,14 @@ public class SunshineListenerService extends WearableListenerService
     static final int COL_WEATHER_MIN_TEMP = 4;
     static final int COL_LOCATION_SETTING = 5;
     static final int COL_WEATHER_CONDITION_ID = 6;
-    static final int COL_COORD_LAT = 7;
-    static final int COL_COORD_LONG = 8;
 
     @Override
     public void onMessageReceived(MessageEvent messageEvent) {
 
-        if(!messageEvent.getPath().equalsIgnoreCase(WEARABLE_WEATHER_REQUEST))
+        if(!messageEvent.getPath().equalsIgnoreCase(AppConstants.PATH_REQUEST_WEATHER))
             return;
 
-        Log.d(LOG_TAG, "Message Received from Watch");
+        Log.d(LOG_TAG, "Message Received from Wearable");
 
         if (mGoogleApiClient == null) {
             mGoogleApiClient = new GoogleApiClient.Builder(this)
@@ -89,7 +79,7 @@ public class SunshineListenerService extends WearableListenerService
             DataMap currentWeatherData = getWearableWeatherDataMap(weatherData, context);
             sendWearableWeatherData(currentWeatherData);
         } else {
-            Log.d(LOG_TAG, "NO DATA");
+            Log.d(LOG_TAG, "No weather data");
         }
 
     }
@@ -103,8 +93,8 @@ public class SunshineListenerService extends WearableListenerService
         String lowString = Utility.formatTemperature(context, low);
 
         DataMap currentWeatherData = new DataMap();
-        currentWeatherData.putString("highTemperature", highString + "msg");
-        currentWeatherData.putString("lowTemperature", lowString);
+        currentWeatherData.putString(AppConstants.KEY_HIGH_TEMPERATURE, highString);
+        currentWeatherData.putString(AppConstants.KEY_LOW_TEMPERATURE, lowString);
 
         return currentWeatherData;
     }
@@ -152,7 +142,7 @@ public class SunshineListenerService extends WearableListenerService
         //http://stackoverflow.com/a/18571348
         byte[] rawData = currentWeatherData.toByteArray();
 
-        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/weather-update", rawData);
+        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, AppConstants.PATH_WEATHER_UPDATE, rawData);
     }
 
     private class StartWearableWeatherSync extends AsyncTask<DataMap, Void, Void> {
@@ -170,7 +160,7 @@ public class SunshineListenerService extends WearableListenerService
     }
 
     public void sendWearableWeatherData(DataMap currentWeatherData) {
-        Log.d(LOG_TAG, "Sending WEATHER UPDATE FROM MOBILE SERVICE");
+        Log.d(LOG_TAG, "Sending updated weather data to Wearable");
         new StartWearableWeatherSync().execute(currentWeatherData);
     }
 }

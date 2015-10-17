@@ -30,7 +30,7 @@ import android.text.format.Time;
 import android.util.Log;
 
 import com.bumptech.glide.Glide;
-import com.example.android.sunshine.app.AppConstantsPrivate;
+import com.example.android.sunshine.app.constants.AppConstantsPrivate;
 import com.example.android.sunshine.app.MainActivity;
 import com.example.android.sunshine.app.R;
 import com.example.android.sunshine.app.Utility;

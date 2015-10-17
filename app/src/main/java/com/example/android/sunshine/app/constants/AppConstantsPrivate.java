@@ -1,4 +1,4 @@
-package com.example.android.sunshine.app;
+package com.example.android.sunshine.app.constants;
 
 /**
  * Created by levani on 10/17/15.

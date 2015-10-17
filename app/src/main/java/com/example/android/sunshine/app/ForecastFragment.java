@@ -112,7 +112,6 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
          * DetailFragmentCallback for when an item has been selected.
          */
         public void onItemSelected(Uri dateUri, ForecastAdapter.ForecastAdapterViewHolder vh);
-        void onWearableWeatherDataUpdated(PutDataMapRequest putDataMapReq);
     }
 
     public ForecastFragment() {
@@ -336,7 +335,6 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
     public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
         mForecastAdapter.swapCursor(data);
         updateEmptyView();
-        processWearableWeatherData(data);
 
         if ( data.getCount() == 0 ) {
             getActivity().supportStartPostponedEnterTransition();
@@ -382,34 +380,6 @@ public class ForecastFragment extends Fragment implements LoaderManager.LoaderCa
 
         }
 
-    }
-
-    private void processWearableWeatherData(Cursor data){
-        if ( data.getCount() > 0 ) {
-            data.moveToFirst();
-            // Read high temperature from cursor
-            Context context = getActivity();
-            double high = data.getDouble(ForecastFragment.COL_WEATHER_MAX_TEMP);
-            String highString = Utility.formatTemperature(context, high);
-
-            // Read low temperature from cursor
-            double low = data.getDouble(ForecastFragment.COL_WEATHER_MIN_TEMP);
-            String lowString = Utility.formatTemperature(context, low);
-
-            int weatherId = data.getInt(ForecastFragment.COL_WEATHER_CONDITION_ID);
-            int defaultImage = Utility.getIconResourceForWeatherCondition(weatherId);
-            Bitmap weatherIcon = BitmapFactory.decodeResource(context.getResources(), defaultImage);
-
-            PutDataMapRequest putDataMapReq = PutDataMapRequest.create("/weather-update");
-            putDataMapReq.getDataMap().putString("highTemperature", highString);
-            putDataMapReq.getDataMap().putString("lowTemperature", lowString);
-
-            // https://developer.android.com/training/wearables/data-layer/assets.html
-            Asset iconAsset = createAssetFromBitmap(weatherIcon);
-            putDataMapReq.getDataMap().putAsset("weatherIcon", iconAsset);
-
-            ((Callback) getActivity()).onWearableWeatherDataUpdated(putDataMapReq);
-        }
     }
 
     private static Asset createAssetFromBitmap(Bitmap bitmap) {
