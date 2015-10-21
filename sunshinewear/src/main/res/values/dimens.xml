@@ -2,8 +2,20 @@
 <resources>
     <dimen name="digital_text_size">40dp</dimen>
     <dimen name="digital_text_size_round">45dp</dimen>
+    <dimen name="digital_weather_text_size_round">25dp</dimen>
     <dimen name="digital_x_offset">15dp</dimen>
     <dimen name="digital_x_offset_round">25dp</dimen>
+
+    <dimen name="digital_x_offset_high_temperature_round">25dp</dimen>
+    <dimen name="digital_x_offset_icon_round">85dp</dimen>
+    <dimen name="digital_x_offset_low_temperature_round">115dp</dimen>
+
     <dimen name="time_display_digital_y_offset">90dp</dimen>
+
     <dimen name="weather_display_digital_y_offset">135dp</dimen>
+    <dimen name="weather_icon_y_offset">95dp</dimen>
+
+    <dimen name="temperature_text_size">16dp</dimen>
+    <dimen name="time_text_size">78dp</dimen>
+
 </resources>

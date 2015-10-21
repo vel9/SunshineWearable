@@ -21,7 +21,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
@@ -32,6 +34,7 @@ import android.support.v4.content.LocalBroadcastManager;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
 import android.text.format.Time;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 
@@ -78,6 +81,7 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
 
         private String mHighTemperature;
         private String mLowTemperature;
+        private Bitmap mWeatherIcon;
 
         final BroadcastReceiver mTimeZoneReceiver = new BroadcastReceiver() {
             @Override
@@ -87,21 +91,38 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             }
         };
 
-        // Reference 1: http://android-wear-docs.readthedocs.org
-        // Reference 2: http://stackoverflow.com/a/8875292
         final BroadcastReceiver mWeatherReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                mHighTemperature = intent.getStringExtra(AppConstants.KEY_HIGH_TEMPERATURE);
-                mLowTemperature = intent.getStringExtra(AppConstants.KEY_LOW_TEMPERATURE);
+                // Reference 1: http://android-wear-docs.readthedocs.org
+                // Reference 2: http://stackoverflow.com/a/8875292
+                String highTemperature = intent.getStringExtra(AppConstants.KEY_HIGH_TEMPERATURE);
+                String lowTemperature = intent.getStringExtra(AppConstants.KEY_LOW_TEMPERATURE);
+                if (highTemperature != null && lowTemperature != null){
+                    mHighTemperature = highTemperature;
+                    mLowTemperature = lowTemperature;
+                }
+
+                Log.d(LOG_TAG, "has bytestream extra? " + intent.hasExtra(AppConstants.KEY_WEATHER_ICON));
+                if (intent.hasExtra(AppConstants.KEY_WEATHER_ICON)) {
+                    Bitmap weatherIconByteArray = intent.getParcelableExtra(AppConstants.KEY_WEATHER_ICON);
+                    Log.d(LOG_TAG, "is iconByteArray null " + (weatherIconByteArray == null));
+                    if (weatherIconByteArray != null)
+                        mWeatherIcon = weatherIconByteArray;
+                }
             }
         };
 
         boolean mRegisteredTimeZoneReceiver = false;
         boolean mRegisteredWeatherReceiver = false;
 
+        //Paint objects
         Paint mBackgroundPaint;
-        Paint mTextPaint;
+        Paint mTimeHoursTextPaint;
+        Paint mTimeMinutesTextPaint;
+        Paint mTimeSecondsTextPaint;
+        Paint mTemperatureHighTextPaint;
+        Paint mTemperatureLowTextPaint;
 
         boolean mAmbient;
 
@@ -109,7 +130,14 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
 
         float mXOffset;
         float mDigitalTimeDisplayYOffset;
-        float mWeatherDisplayYOffset;
+        float mXOffsetHighTemperature;
+        float mXOffsetLowTemperature;
+        float mXOffsetIcon;
+        float mTemperatureDisplayYOffset;
+        float mWeatherIconDisplayYOffset;
+
+        float mTextHoursXOffset;
+        float mTextTimeYOffset;
 
         /**
          * Whether the display supports fewer bits for each color in ambient mode. When true, we
@@ -154,7 +182,10 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
         /**
          * Sends a message to the connected mobile device, telling it to show a Toast.
          */
-        private void sendWeatherRequest() {
+        private void requestWeatherData() {
+
+            initApi();
+
             if (nodeId != null) {
                 new Thread(new Runnable() {
                     @Override
@@ -178,16 +209,34 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
                     .build());
             Resources resources = SunshineWatchFaceService.this.getResources();
             mDigitalTimeDisplayYOffset = resources.getDimension(R.dimen.time_display_digital_y_offset);
-            mWeatherDisplayYOffset = resources.getDimension(R.dimen.weather_display_digital_y_offset);
+            mTemperatureDisplayYOffset = resources.getDimension(R.dimen.weather_display_digital_y_offset);
 
+            mXOffsetHighTemperature = resources.getDimension(R.dimen.digital_x_offset_high_temperature_round);
+            mXOffsetLowTemperature = resources.getDimension(R.dimen.digital_x_offset_low_temperature_round);
+            mXOffsetIcon = resources.getDimension(R.dimen.digital_x_offset_icon_round);
+
+            // background color
             mBackgroundPaint = new Paint();
             mBackgroundPaint.setColor(resources.getColor(R.color.digital_background));
 
-            mTextPaint = new Paint();
-            mTextPaint = createTextPaint(resources.getColor(R.color.digital_text));
+            // time display
+            mTimeHoursTextPaint = createTimeHoursTextPaint(resources);
+            mTimeMinutesTextPaint = createTimeMinutesTextPaint(resources);
+            mTimeSecondsTextPaint = createTimeSecondsTextPaint(resources);
+
+            // temperature display
+            mTemperatureHighTextPaint = createTemperatureHighTextPaint(resources);
+            mTemperatureLowTextPaint = createTemperatureLowTextPaint(resources);
+
+            // In order to make text in the center, we need adjust its position
+            mTextTimeYOffset = (mTimeHoursTextPaint.ascent() + mTimeHoursTextPaint.descent()) / 2;
+
+            mTemperatureDisplayYOffset = mTextTimeYOffset + mTimeHoursTextPaint.ascent();
+            mWeatherIconDisplayYOffset = mTemperatureDisplayYOffset - (mTimeHoursTextPaint.ascent() + mTimeHoursTextPaint.descent());
 
             mTime = new Time();
 
+            requestWeatherData();
         }
 
         @Override
@@ -196,11 +245,48 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             super.onDestroy();
         }
 
-        private Paint createTextPaint(int textColor) {
+        private Paint createTimeHoursTextPaint(Resources resources) {
             Paint paint = new Paint();
-            paint.setColor(textColor);
+            paint.setColor(resources.getColor(R.color.time_hours_text));
             paint.setTypeface(NORMAL_TYPEFACE);
             paint.setAntiAlias(true);
+            paint.setTextSize(resources.getDimension(R.dimen.time_text_size));
+            return paint;
+        }
+
+        private Paint createTimeMinutesTextPaint(Resources resources) {
+            Paint paint = new Paint();
+            paint.setColor(Color.WHITE);
+            paint.setTypeface(NORMAL_TYPEFACE);
+            paint.setAntiAlias(true);
+            paint.setTextSize(resources.getDimension(R.dimen.time_text_size));
+            return paint;
+        }
+
+        private Paint createTimeSecondsTextPaint(Resources resources) {
+            Paint paint = new Paint();
+            paint.setColor(resources.getColor(R.color.digital_text));
+            paint.setTypeface(NORMAL_TYPEFACE);
+            paint.setAntiAlias(true);
+            paint.setTextSize(resources.getDimension(R.dimen.time_text_size));
+            return paint;
+        }
+
+        private Paint createTemperatureHighTextPaint(Resources resources) {
+            Paint paint = new Paint();
+            paint.setColor(resources.getColor(R.color.temperature_high));
+            paint.setTypeface(NORMAL_TYPEFACE);
+            paint.setAntiAlias(true);
+            paint.setTextSize(resources.getDimension(R.dimen.temperature_text_size));
+            return paint;
+        }
+
+        private Paint createTemperatureLowTextPaint(Resources resources) {
+            Paint paint = new Paint();
+            paint.setColor(resources.getColor(R.color.temperature_low));
+            paint.setTypeface(NORMAL_TYPEFACE);
+            paint.setAntiAlias(true);
+            paint.setTextSize(resources.getDimension(R.dimen.temperature_text_size));
             return paint;
         }
 
@@ -211,8 +297,7 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             if (visible) {
                 registerReceiver();
 
-                initApi();
-                sendWeatherRequest();
+                requestWeatherData();
 
                 // Update time zone in case it changed while we weren't visible.
                 mTime.clear(TimeZone.getDefault().getID());
@@ -235,9 +320,6 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
 
             if (!mRegisteredWeatherReceiver) {
                 mRegisteredWeatherReceiver = true;
-                // Register to receive messages.
-                // We are registering an observer (mMessageReceiver) to receive Intents
-                // with actions named "custom-event-name".
                 LocalBroadcastManager.getInstance(SunshineWatchFaceService.this).registerReceiver(mWeatherReceiver,
                         new IntentFilter(AppConstants.WEATHER_UPDATE_BROADCAST));
             }
@@ -264,12 +346,12 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             // Load resources that have alternate values for round watches.
             Resources resources = SunshineWatchFaceService.this.getResources();
             boolean isRound = insets.isRound();
-            mXOffset = resources.getDimension(isRound
-                    ? R.dimen.digital_x_offset_round : R.dimen.digital_x_offset);
-            float textSize = resources.getDimension(isRound
-                    ? R.dimen.digital_text_size_round : R.dimen.digital_text_size);
+            mTextHoursXOffset = mTimeHoursTextPaint.measureText("00");
 
-            mTextPaint.setTextSize(textSize);
+//            mXOffset = resources.getDimension(isRound
+//                    ? R.dimen.digital_x_offset_round : R.dimen.digital_x_offset);
+//            float textSize = resources.getDimension(isRound
+//                    ? R.dimen.digital_text_size_round : R.dimen.digital_text_size);
         }
 
         @Override
@@ -290,7 +372,7 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
             if (mAmbient != inAmbientMode) {
                 mAmbient = inAmbientMode;
                 if (mLowBitAmbient) {
-                    mTextPaint.setAntiAlias(!inAmbientMode);
+                    mTimeHoursTextPaint.setAntiAlias(!inAmbientMode);
                 }
                 invalidate();
             }
@@ -303,17 +385,60 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
         @Override
         public void onDraw(Canvas canvas, Rect bounds) {
             // Draw the background.
-            canvas.drawRect(0, 0, bounds.width(), bounds.height(), mBackgroundPaint);
+            float width = bounds.width();
+            float height = bounds.height();
+            float centerX = width / 2f;
+            float centerY = height / 2f;
+
+            canvas.drawRect(0, 0, width, height, mBackgroundPaint);
 
             // Draw H:MM in ambient mode or H:MM:SS in interactive mode.
             mTime.setToNow();
             String text = mAmbient
-                    ? String.format("%d:%02d", mTime.hour, mTime.minute)
-                    : String.format("%d:%02d:%02d", mTime.hour, mTime.minute, mTime.second);
-            canvas.drawText(text, mXOffset, mDigitalTimeDisplayYOffset, mTextPaint);
+                    ? String.format("%02d:%02d", mTime.hour, mTime.minute)
+                    : String.format("%02d:%02d:%02d", mTime.hour, mTime.minute, mTime.second);
 
-            if (mHighTemperature != null && mLowTemperature != null)
-                canvas.drawText(mHighTemperature + " - " + mLowTemperature, mXOffset, mWeatherDisplayYOffset, mTextPaint);
+            String hours = text.substring(0,2);
+            String minutes = text.substring(3,5);
+            float timeYOffset = centerY - mTextTimeYOffset;
+
+            canvas.drawText(hours,
+                            centerX - mTextHoursXOffset,
+                            timeYOffset,
+                            mTimeHoursTextPaint);
+
+            canvas.drawText(minutes,
+                            centerX,
+                            timeYOffset,
+                            mTimeMinutesTextPaint);
+
+            float temperatureY = 0;
+            if (mHighTemperature != null && mLowTemperature != null){
+
+                Log.d(LOG_TAG, "centerY: " + centerY);
+                Log.d(LOG_TAG, "mTemperatureHighTextPaint.ascent: " + mTemperatureHighTextPaint.ascent());
+                Log.d(LOG_TAG, "mTemperatureHighTextPaint.descent: " + mTemperatureHighTextPaint.descent());
+
+                float temperatureHeight = (mTemperatureHighTextPaint.descent() - mTemperatureHighTextPaint.ascent());
+                temperatureY = bounds.top + temperatureHeight + 16;
+
+                //draw high temperature
+                canvas.drawText(mHighTemperature,
+                        centerX - mTemperatureHighTextPaint.measureText(mHighTemperature),
+                        temperatureY,
+                        mTemperatureHighTextPaint);
+                //draw low temperature
+                canvas.drawText(mLowTemperature,
+                                centerX,
+                                temperatureY,
+                                mTemperatureLowTextPaint);
+            }
+
+            if (mWeatherIcon != null)
+                canvas.drawBitmap(mWeatherIcon,
+                        centerX - mWeatherIcon.getWidth()/2,
+                        temperatureY + 4,
+                        null);
         }
 
         /**

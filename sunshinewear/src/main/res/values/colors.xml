@@ -2,4 +2,11 @@
 <resources>
     <color name="digital_background">#000000</color>
     <color name="digital_text">#ffffff</color>
+
+    <color name="time_hours_text">#FF5722</color>
+    <color name="time_minutes_text">#ffffff</color>
+
+    <color name="temperature_high">#9E9E9E</color>
+    <color name="temperature_low">#ffffff</color>
+
 </resources>
