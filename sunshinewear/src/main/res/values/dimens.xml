@@ -12,10 +12,13 @@
 
     <dimen name="time_display_digital_y_offset">90dp</dimen>
 
-    <dimen name="weather_display_digital_y_offset">135dp</dimen>
-    <dimen name="weather_icon_y_offset">95dp</dimen>
+    <dimen name="weather_text_y_offset">48dp</dimen>
+    <dimen name="weather_icon_y_offset">50dp</dimen>
+    <dimen name="vel9_logo_y_offset">186dp</dimen>
 
     <dimen name="temperature_text_size">16dp</dimen>
     <dimen name="time_text_size">78dp</dimen>
+
+    <dimen name="logo_text_size">12dp</dimen>
 
 </resources>
