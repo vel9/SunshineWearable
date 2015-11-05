@@ -423,8 +423,8 @@ public class SunshineWatchFaceService extends CanvasWatchFaceService {
         }
 
         private String formatHours(int hour){
-            if (hour == 12)
-                return Integer.toString(hour);
+            if (hour == 12 || hour == 0)
+                return Integer.toString(12);
             else
                 return String.format("%02d", hour % 12);
         }
