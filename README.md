@@ -7,7 +7,7 @@ The Sunshine App, which the wearable leverages for updated weather data, was dev
 [Developing Android Apps, Android Fundamentals](https://www.udacity.com/course/developing-android-apps--ud853)
 [Advanced Android App Development](https://www.udacity.com/course/advanced-android-app-development--ud855)
 
-Core wearable integration code can be found in the following locations:
+Core wearable integration code can be found at the following locations:
 
 /sunshinewear/src/main/java/com/example/android/sunshine/app/SunshineWatchFaceListenerService.java
 /sunshinewear/src/main/java/com/example/android/sunshine/app/SunshineWatchFaceService.java
